@@ -33,7 +33,7 @@ print("=" * 70)
 # [1] LOAD DATASET
 # -----------------------------------------------------------------
 print("\n[Phase 1] Loading dataset...")
-dataset_df = pd.read_csv('human_amr_poultry_residue_dataset.csv')
+dataset_df = pd.read_csv('human_amr_poultry_residue_dataset_stm.csv')
 print(f"Dataset: {dataset_df.shape[0]} records, {dataset_df.shape[1]} features")
 
 # -----------------------------------------------------------------
