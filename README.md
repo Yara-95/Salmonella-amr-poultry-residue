@@ -1,129 +1,148 @@
 # Simulation-Based Framework for Poultry Antibiotic Residues and *Salmonella* Resistance
 
-This repository contains the simulation code, scenario-level results, and figure
-files accompanying the methodological proof-of-concept study:
+This repository contains the synthetic dataset, analysis code, and scenario-level results accompanying the manuscript:
 
-**A Simulation-Based Framework for Integrating Poultry Antibiotic Residue Data
-with Salmonella Resistance Profiles: A Methodological Proof-of-Concept**
+“A Simulation-Based Framework for Integrating Poultry Antibiotic Residue Data with Salmonella Resistance Profiles: A Methodological Proof-of-Concept”
 
-## Important interpretation
+## Manuscript Status
 
-All records and outcomes in this repository are synthetic. They do not represent
-real poultry samples, *Salmonella* isolates, patients, or geographic regions.
+The manuscript is currently under revision and peer review at BMC Veterinary Research. It has not yet been accepted or published.
 
-The simulations evaluate how a machine-learning pipeline behaves when data are
-generated under explicitly defined assumptions. They do **not** establish a
-biological association between poultry antimicrobial residues and resistance in
-human *Salmonella*, and they do not demonstrate clinical or surveillance
-prediction. Any practical application would require validation with independent
-biological data.
+## Important Interpretation
 
-## Repository contents
+All observations, resistance labels, and geographic regions are synthetic. They do not represent real poultry samples, *Salmonella* isolates, patients, or geographic areas.
 
-- `simulation_scenarios.py` — Python script for generating and evaluating
-  independent simulation scenarios.
-- `scenario_results.csv` — scenario-level AUC-ROC summary results.
-- `Figure8_scenario_robustness.jpg` — figure comparing model performance
-  across simulation scenarios.
-- Add any additional manuscript-related files here, using their exact filenames.
+The simulations evaluate how a machine-learning pipeline behaves when data are generated under explicitly defined assumptions. They do not establish a biological association between poultry antimicrobial residues and resistance in human *Salmonella* isolates, and they do not demonstrate validated clinical or surveillance prediction.
 
-## Multi-scenario robustness analysis
+Any practical application would require validation with independent biological data.
 
-The robustness analysis includes 14 scenarios (S0–S13). Each scenario is
-evaluated using 30 independently generated datasets, with 2,500 records per
-dataset. Each dataset is split into training and test sets using an 80/20
-stratified split.
+## Repository Contents
 
-The scenarios vary assumptions about:
+- `human_amr_poultry_residue_dataset_stm.csv` — synthetic dataset used for the main analysis.
+- `project_AMR.py` — main analysis script.
+- `simulation_scenarios_v2.py` — script for generating and evaluating multiple simulation scenarios.
+- `scenario_results_v2.csv` — scenario-level performance summaries.
+- `README.md` — repository overview, execution instructions, interpretation, and limitations.
 
-- The strength and form of the simulated residue–resistance relationship,
-  including a true-null scenario with no predefined association.
-- Whether MIC values are generated independently of, or conditionally on,
-  the simulated resistance label.
+## Multi-Scenario Robustness Analysis
+
+The robustness analysis includes 14 scenarios (S0–S13). Each scenario is evaluated using 30 independently generated datasets of 2,500 observations.
+
+Within each replicate, the dataset is divided into training and test sets using an 80/20 stratified split. A Random Forest classifier with 150 trees and a maximum depth of 12 is fitted and evaluated on the held-out test set.
+
+### Assumptions Evaluated
+
+The scenarios vary:
+
+- The strength of the simulated residue–resistance relationship, including no predefined association.
+- The form of the relationship: step, logistic, or linear.
+- Label-independent versus label-conditional MIC generation.
 - MIC overlap and MIC distribution.
-- Resistant-class prevalence and class imbalance.
-- Whether residue effects apply to all antibiotics or only selected antibiotics,
-  and whether thresholds differ by antibiotic.
+- Resistant-class prevalence, including 80% and 20% resistant scenarios.
+- Whether the residue effect applies to all antibiotics or only ciprofloxacin.
+- Common versus antibiotic-specific residue thresholds.
 
-For each replicate, the script evaluates three feature sets:
+Class-imbalance scenarios use sampling without replacement from a larger simulated pool to avoid duplicating records.
 
-1. **All features:** residue, MIC, antibiotic, and synthetic region.
-2. **Without MIC:** residue, antibiotic, and synthetic region; this helps isolate
-   the information associated with the simulated residue signal.
-3. **MIC only:** MIC, antibiotic, and synthetic region; this helps show the
-   contribution of MIC values generated conditionally on the simulated label.
+### Feature Sets
 
-Results are summarized using the mean test-set AUC-ROC and standard deviation
-across independent replicates. The figure displays mean AUC-ROC ± SD; the
-dashed line marks chance-level discrimination (AUC-ROC = 0.50).
+Each replicate evaluates three feature sets using identical model hyperparameters:
 
-## Interpretation of the null and MIC scenarios
+1. All features: residue, MIC, antibiotic, and synthetic region.
+2. Without MIC: residue, antibiotic, and synthetic region.
+3. MIC plus categorical descriptors: MIC, antibiotic, and synthetic region, without residue.
 
-- **S0 — True null:** The resistance label is independent of residue, and MIC
-  is independent of the label. Performance near AUC-ROC 0.50 is expected when
-  no association is encoded.
-- **S1 — Residue null, MIC label-conditional:** The label is independent of
-  residue, but MIC is generated conditional on the label. Performance from
-  models including MIC therefore reflects the simulation design and must not
-  be interpreted as evidence of a residue effect.
-- In the remaining scenarios, the model can recover patterns that were
-  deliberately encoded in the data-generating rules. Higher performance
-  indicates recovery of those simulated rules, not discovery of a real-world
-  biological relationship.
+The second feature set helps distinguish recovery of the simulated residue signal from the contribution of MIC. The third evaluates the information carried by MIC together with antibiotic and region.
 
-Because MIC is generated conditional on the simulated resistance label in
-some scenarios, MIC can act as a proxy for that label by construction. The
-simulated labels are not clinical susceptibility categories assigned using
-CLSI/EUCAST breakpoints or epidemiological cut-off values.
+## Results Summary
+
+The results file reports:
+
+- Mean test-set AUC-ROC and standard deviation for each feature set.
+- The 2.5th and 97.5th percentiles of AUC-ROC across replicates for the all-feature and without-MIC models.
+- Mean test-set accuracy for the all-feature model.
+- The percentage of resistant labels in the final generated replicate of each scenario.
+
+The percentile ranges describe variability across simulated datasets; they are not confidence intervals for the mean.
+
+Figure 8 in the manuscript presents mean AUC-ROC ± standard deviation across replicates, with a dashed line marking chance-level discrimination (AUC-ROC = 0.50).
+
+## Interpretation of the Null Scenarios
+
+### S0: True Null
+
+The resistance label is independent of residue, and MIC is generated independently of the label. Performance near AUC-ROC 0.50 is expected when no association is encoded.
+
+### S1: Residue Null with Label-Conditional MIC
+
+The resistance label is independent of residue, but MIC is generated conditional on the label.
+
+Performance from models including MIC therefore reflects the MIC-generation design and must not be interpreted as evidence of a residue effect.
+
+### Interpretation Across Scenarios
+
+Higher model performance indicates recovery of patterns deliberately encoded in the simulation. It does not demonstrate discovery of a real-world biological relationship.
+
+## MIC Generation and Susceptibility Interpretation
+
+In the base design and most scenarios, MIC values are generated conditional on the simulated resistance label and antibiotic identity. MIC therefore carries information about the label by construction.
+
+Partially overlapping MIC ranges reduce perfect separation but do not remove this circularity.
+
+The simulated resistance labels are assigned by the data-generating rule. They are not susceptibility categories derived using CLSI/EUCAST clinical breakpoints or epidemiological cut-off values.
 
 ## Requirements
 
-The analysis script uses Python and the following packages:
+The multi-scenario script, `simulation_scenarios_v2.py`, uses Python and the following packages:
 
 - NumPy
 - pandas
 - scikit-learn
 
-## Run the scenario analysis
+These requirements apply to the multi-scenario script; the main analysis may require additional packages.
+
+## Run the Scenario Analysis
 
 From the repository directory, run:
 
 ```bash
-python simulation_scenarios.py
+python simulation_scenarios_v2.py
 ```
 
-By default, the script runs 30 replicates per scenario. To choose a different
-number of replicates, provide it as a command-line argument:
+The default is 30 replicates per scenario. The replicate count can also be specified explicitly:
 
 ```bash
-python simulation_scenarios.py 30
+python simulation_scenarios_v2.py 30
 ```
 
-The script writes scenario-level results to a CSV file. Check the output
-filename in the script before running; it may differ from the committed
-`scenario_results.csv`.
+The script writes results to:
+
+```text
+scenario_results_v2.csv
+```
+
+Running the script in a directory containing an existing file with this name will overwrite that file.
 
 ## Limitations
 
-The scenario results depend on the specified data-generating rules, including
-the residue range, resistance probabilities, MIC ranges, and class-conditional
-MIC generation. These assumptions are methodological choices, not estimates
-from linked field or clinical data.
+The results depend on the specified data-generating rules, including residue ranges, resistance probabilities, MIC distributions, and label-conditional MIC generation. These are simulation assumptions, not estimates obtained from linked field or clinical data.
 
-The same residue range was applied across the four antibiotics for simulation
-simplicity, despite drug-specific differences in residue distributions and
-maximum residue limits. The available local field evidence primarily concerned
-fluoroquinolone residues. The antibiotic-specific scenarios explore some
-alternative assumptions but cannot replace drug-specific empirical data.
+The same residue range of 0.02–5.0 mg/kg is used across the four antibiotics for simulation simplicity. This does not imply that real residue distributions or maximum residue limits are equivalent across drugs.
 
-The results should therefore be interpreted only as a computational
-proof-of-concept. Validation with independently collected and linked residue,
-microbiological, and clinical data would be required before evaluating any
-biological or practical application.
+The available local field evidence primarily concerns fluoroquinolone residues. Antibiotic-specific scenarios explore selected alternative assumptions but cannot replace drug-specific empirical data.
 
-## Reproducibility note
+The multi-scenario analysis characterizes performance under controlled synthetic conditions. It does not establish generalizability to real biological populations.
 
-The committed results and figure should be regenerated from the same version
-of the analysis script and the stated replicate count. Verify that the
-script-generated CSV filename matches the filename referenced above before
-publishing or committing updated outputs.
+Validation using independently collected and appropriately linked residue, microbiological, and clinical data would be required before considering biological interpretation or practical application.
+
+## Reproducibility
+
+The script uses fixed random seeds for dataset generation and train–test splitting.
+
+For comparisons with the reported results, use the same script version, scenario definitions, and replicate count. Record Python and package versions when reproducing the analysis, as software versions may affect numerical results.
+
+## Acknowledgment
+
+If you use the code or synthetic dataset, please acknowledge Yara Al-Hallak and this GitHub repository.
+
+Publication details and a DOI will be added if the associated manuscript is accepted and published.
