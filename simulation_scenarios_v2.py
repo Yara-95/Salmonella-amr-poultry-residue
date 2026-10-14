@@ -6,6 +6,7 @@ Corrections relative to v1:
     which duplicated residue values across train/test: 49% of test residues also appeared in train).
   * MIC noise = probability m that an MIC is drawn from the OPPOSITE class range (interpretable overlap manipulation).
   * Each scenario is replicated R times (independent datasets) -> mean, SD, 2.5-97.5 percentile of test AUC.
+  * Resistant_pct is the MEAN resistant prevalence (%) over the replicates of each scenario.
   * Three models per replicate: A = all features, B = without MIC (isolates the residue signal), C = MIC only.
 """
 import sys, numpy as np, pandas as pd
@@ -141,13 +142,13 @@ if __name__ == '__main__':
     REPS = int(sys.argv[1]) if len(sys.argv) > 1 else 30
     rows = []
     for name, kw in SC:
-        a, b, c, acc = [], [], [], []
+        a, b, c, acc, prev = [], [], [], [], []
         for r in range(REPS):
             rng = np.random.default_rng(1000 + r); df = generate(rng, **kw)
             A, ac = fit_auc(df, ['R', 'M', 'A', 'G'], r); B, _ = fit_auc(df, ['R', 'A', 'G'], r); C, _ = fit_auc(df, ['M', 'A', 'G'], r)
-            a.append(A); b.append(B); c.append(C); acc.append(ac)
+            a.append(A); b.append(B); c.append(C); acc.append(ac); prev.append(100 * df.y.mean())
         f = lambda v: (np.mean(v), np.std(v, ddof=1), np.percentile(v, 2.5), np.percentile(v, 97.5))
-        rows.append(dict(Scenario=name, Resistant_pct=round(100 * df.y.mean(), 1),
+        rows.append(dict(Scenario=name, Resistant_pct=round(np.mean(prev), 1),  # mean prevalence (%) across the replicates
                          AUC_all=f(a)[0], SD_all=f(a)[1], lo_all=f(a)[2], hi_all=f(a)[3], Acc_all=np.mean(acc),
                          AUC_noMIC=f(b)[0], SD_noMIC=f(b)[1], lo_noMIC=f(b)[2], hi_noMIC=f(b)[3],
                          AUC_MIConly=f(c)[0], SD_MIConly=f(c)[1]))
