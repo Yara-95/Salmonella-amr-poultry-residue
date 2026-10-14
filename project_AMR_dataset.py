@@ -1,5 +1,5 @@
 # =====================================================================
-# Predicting Human Salmonella AMR via Poultry Antibiotic Residues
+# Simulation-Based Analysis of Synthetic Salmonella Resistance Labels
 # 
 # ENHANCEMENTS ADDED:
 # 1. SHAP Values for individual prediction explanation
@@ -20,6 +20,8 @@ from sklearn.metrics import (
     roc_auc_score, roc_curve, precision_recall_curve, average_precision_score
 )
 import shap
+import importlib
+shap.plots = importlib.import_module("shap.plots")
 
 # Configuration
 np.random.seed(7)
@@ -212,11 +214,17 @@ print("=" * 60)
 explainer = shap.TreeExplainer(rf_optimized)
 shap_values = explainer.shap_values(X_test)
 
-# For binary classification, extract class 1 (Resistant)
-if len(shap_values.shape) == 3:
-    shap_class1 = shap_values[:, :, 1]
+# Extract positive-class SHAP contributions.
+if isinstance(shap_values, list):
+    shap_class1 = np.asarray(shap_values[1])
 else:
-    shap_class1 = shap_values[1]
+    arr = np.asarray(shap_values)
+    if arr.ndim == 3 and arr.shape[2] == 2:
+        shap_class1 = arr[:, :, 1]
+    elif arr.ndim == 2 and arr.shape == X_test.shape:
+        shap_class1 = arr
+    else:
+        raise ValueError(f'Unexpected SHAP shape: {arr.shape}')
 
 # Create SHAP Explanation object
 explanation = shap.Explanation(
@@ -283,8 +291,102 @@ print("\nKEY INSIGHTS:")
 print(f"1. Logistic Regression: {lr_acc:.1f}% accuracy (linear baseline)")
 print(f"2. Precision-Recall: RF Optimized AP = {opt_ap:.3f} (excellent for imbalanced data)")
 print(f"3. SHAP confirms: Poultry_Residue is #1 driver (mean |SHAP| = {np.abs(shap_class1[:, feature_names.index('Poultry_Residue_Level_mg_kg')]).mean():.3f})")
-print(f"4. MIC overlap design: Successfully prevents data leakage")
+print(f"4. MIC overlap does not remove label-conditional MIC circularity")
 print("=" * 70)
 
 summary.to_csv('model_comparison_summary.csv', index=False)
 print("\n✅ All outputs saved successfully!")
+
+# Cross-validation: shuffled folds, distinct from calibration folds.
+from sklearn.model_selection import StratifiedKFold, cross_validate
+from sklearn.pipeline import make_pipeline
+from sklearn.calibration import CalibratedClassifierCV, calibration_curve
+from sklearn.metrics import brier_score_loss
+from scipy.stats import t
+import sys
+folds = StratifiedKFold(n_splits=5, shuffle=True, random_state=7)
+cv_models = [
+    ('RF Baseline', RandomForestClassifier(n_estimators=50,max_depth=5,random_state=7), X_categorical),
+    ('Logistic Regression', make_pipeline(StandardScaler(),LogisticRegression(max_iter=1000,random_state=7)), X_full),
+    ('RF Optimized', RandomForestClassifier(n_estimators=150,max_depth=12,random_state=7), X_full)
+]
+cv_rows=[]; fold_rows=[]
+for name, model, features in cv_models:
+    scores=cross_validate(model,features,y,cv=folds,scoring={'Accuracy':'accuracy','AUC':'roc_auc','AP':'average_precision'})
+    row={'Model':name}
+    for metric in ['Accuracy','AUC','AP']:
+        v=scores['test_'+metric]
+        row[metric+'_mean']=v.mean()
+        row[metric+'_95CI_halfwidth']=t.ppf(.975,4)*v.std(ddof=1)/np.sqrt(5)
+        fold_rows.extend({'Model':name,'Metric':metric,'Fold':i+1,'Score':value} for i,value in enumerate(v))
+    cv_rows.append(row)
+cv_summary=pd.DataFrame(cv_rows)
+cv_summary.to_csv('cross_validation_summary.csv',index=False)
+pd.DataFrame(fold_rows).to_csv('cross_validation_fold_scores.csv',index=False)
+print('\nCROSS-VALIDATION\n',cv_summary.to_string(index=False))
+
+# Isotonic calibration: five stratified, unshuffled TRAINING folds.
+calibrated_model=CalibratedClassifierCV(
+    estimator=RandomForestClassifier(n_estimators=150,max_depth=12,random_state=7),
+    method='isotonic',cv=5,ensemble=True)
+calibrated_model.fit(X_train,y_train)
+cal_proba=calibrated_model.predict_proba(X_test)[:,1]
+cal_summary=pd.DataFrame({'Model':['Raw Random Forest','Isotonic Random Forest (cv=5)'],
+    'Brier_score':[brier_score_loss(y_test,opt_proba),brier_score_loss(y_test,cal_proba)]})
+cal_summary.to_csv('calibration_summary_cv5.csv',index=False)
+print('\nCALIBRATION\n',cal_summary.to_string(index=False))
+fig,ax=plt.subplots(figsize=(7,6)); points=[]
+for name,prob in [('Raw Random Forest',opt_proba),('Isotonic calibration (cv=5)',cal_proba)]:
+    observed,predicted=calibration_curve(y_test,prob,n_bins=10,strategy='uniform')
+    ax.plot(predicted,observed,marker='o',label=name)
+    points.extend({'Model':name,'Mean_probability':a,'Observed_fraction':b} for a,b in zip(predicted,observed))
+ax.plot([0,1],[0,1],'--',color='gray',label='Perfect calibration')
+ax.set(xlabel='Mean predicted resistance probability',ylabel='Observed resistant-label fraction',xlim=(0,1),ylim=(0,1))
+ax.legend();fig.tight_layout()
+fig.savefig('Figure3_calibration_cv5.jpg',dpi=300,bbox_inches='tight')
+plt.show();plt.close(fig)
+pd.DataFrame(points).to_csv('calibration_curve_points.csv',index=False)
+
+# Rule-based reference posterior.
+ranges={'ampicillin':((2.,64.),(.5,32.)),'ciprofloxacin':((.03,4.),(.015,2.)),
+        'tetracycline':((1.,32.),(.25,16.)),'streptomycin':((2.,128.),(.5,64.))}
+test_records=dataset_df.loc[X_test.index]
+prior=np.where(test_records.Poultry_Residue_Level_mg_kg.to_numpy()>1.25,.8,.15)
+fr=[];fs=[]
+for abx,mic in zip(test_records.Antibiotic_Tested,test_records.Human_MIC_mg_L):
+    (a,b),(c,d)=ranges[str(abx).strip().lower()]
+    fr.append(float(a<=mic<=b)/(b-a));fs.append(float(c<=mic<=d)/(d-c))
+num=prior*np.asarray(fr);den=num+(1-prior)*np.asarray(fs)
+if (den==0).any():raise ValueError('MIC outside both assumed class ranges.')
+posterior=num/den
+reference_rows=[]
+for name,prob in [('Reference posterior',posterior),('Residue threshold',(prior==.8).astype(float))]:
+    reference_rows.append({'Model':name,'AUC_ROC':roc_auc_score(y_test,prob),
+        'Accuracy':accuracy_score(y_test,prob>=.5),'AP':average_precision_score(y_test,prob)})
+reference_summary=pd.DataFrame(reference_rows)
+reference_summary.to_csv('reference_benchmark_summary.csv',index=False)
+print('\nREFERENCE BENCHMARK\n',reference_summary.to_string(index=False))
+
+# SHAP exports and probability-scale check.
+expected=np.asarray(explainer.expected_value).reshape(-1)
+base=float(expected[1] if len(expected)>1 else expected[0])
+reconstructed=base+shap_class1.sum(axis=1)
+max_error=float(np.max(np.abs(reconstructed-opt_proba)))
+if not np.allclose(reconstructed,opt_proba,atol=1e-5):
+    raise ValueError('SHAP contributions do not reconstruct positive-class probabilities.')
+global_shap=pd.DataFrame({'Feature':feature_names,'Mean_absolute_SHAP':np.abs(shap_class1).mean(axis=0)}).sort_values('Mean_absolute_SHAP',ascending=False)
+global_shap.to_csv('shap_global_verified.csv',index=False)
+case_rows=[]
+for label,pos in [('Resistant',resistant_idx),('Susceptible',susceptible_idx)]:
+    idx=X_test.index[pos]
+    row={'Class':label,'Patient_ID':dataset_df.loc[idx,'Patient_ID'],
+        'Predicted_probability':opt_proba[pos],'Base_value':base,'Base_plus_all_SHAP':reconstructed[pos]}
+    for j,f in enumerate(feature_names):
+        row[f]=X_test.iloc[pos][f];row['SHAP_'+f]=shap_class1[pos,j]
+    case_rows.append(row)
+pd.DataFrame(case_rows).to_csv('shap_cases_verified.csv',index=False)
+pd.DataFrame({'Check':['Max SHAP probability reconstruction error'],'Value':[max_error]}).to_csv('shap_additivity_check.csv',index=False)
+pd.DataFrame({'Package':['Python','numpy','pandas','scikit-learn','shap','matplotlib'],
+    'Version':[sys.version.split()[0],np.__version__,pd.__version__,__import__('sklearn').__version__,shap.__version__,__import__('matplotlib').__version__]}).to_csv('software_versions.csv',index=False)
+print('\nGLOBAL SHAP\n',global_shap.to_string(index=False))
+print('\nAll main analyses completed. Scenario analysis remains in simulation_scenarios_v2.py.')
