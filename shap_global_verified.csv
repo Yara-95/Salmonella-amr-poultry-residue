@@ -1,0 +1,9 @@
+Feature,Mean_absolute_SHAP
+Poultry_Residue_Level_mg_kg,0.1983853500368185
+Human_MIC_mg_L,0.12143898591648467
+Antibiotic_Tested_Ciprofloxacin,0.05252365591649875
+Antibiotic_Tested_Tetracycline,0.02751880291006642
+Antibiotic_Tested_Streptomycin,0.02088394870711532
+Geographic_Location_Region C,0.011081230968883317
+Geographic_Location_Region B,0.010983463778654895
+Geographic_Location_Region D,0.010559475598281381

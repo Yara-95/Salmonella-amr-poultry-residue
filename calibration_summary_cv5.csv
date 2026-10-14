@@ -1,0 +1,3 @@
+Model,Brier_score
+Raw Random Forest,0.14037190579867614
+Isotonic Random Forest (cv=5),0.13210632517082257
