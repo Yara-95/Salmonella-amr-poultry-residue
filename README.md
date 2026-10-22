@@ -128,10 +128,9 @@ The scripts use fixed random seeds for dataset generation and train–test split
 
 ## License
 
-- Code (`Codes/`): MIT License.
-- Dataset, result files, and figures (`Dataset/`, `Results/`, `Figures/`): CC0 1.0 Universal (public domain dedication).
-
-(The corresponding `LICENSE` files must be present in the repository root for these terms to apply.)
+All content in this repository (code, dataset, result files, and figures) is released under the
+CC0 1.0 Universal public domain dedication (see LICENSE). If you use the code or data, citation
+of the associated article is appreciated but not required.
 
 ## Citation
 
